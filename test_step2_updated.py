@@ -49,7 +49,7 @@ def load_flow():
     return load_flow_from_json(flow_graph)
 
 def extract_keywords(flow1):
-    result = flow1('Return a list of the most interesting and important key topics found in this raw Q&A transcript. Only return the topics and do not return the descriptions')
+    result = flow1('Return up to 10 most interesting and important key topics found in this raw Q&A transcript. Display them as a bulleted list. Only return the topics and do not return the descriptions')
     content_output = result['chat_history'][1].content
     return content_output
 
@@ -59,7 +59,7 @@ def get_quotes(flow1, topics):
     return quotes_output
 
 def get_qa_pairs(flow1, quotes):
-    result = flow1(f'For each of the extracted quotes, generate well-worded question and answer pair: {quotes}. They should not contain the name of the interviewers.')
+    result = flow1(f'For each of the extracted quotes, generate well-worded question and answer pair: {quotes}. Do not mention the name of the interviewers or interviewee in the question answer pairs.')
     qa_pairs_output = result['chat_history'][1].content
     return qa_pairs_output
 
