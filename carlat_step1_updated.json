@@ -134,7 +134,7 @@
                 "list": false,
                 "show": true,
                 "multiline": false,
-                "value": 0.7,
+                "value": 0.00000001,
                 "fileTypes": [],
                 "file_path": "",
                 "password": false,

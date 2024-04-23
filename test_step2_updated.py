@@ -54,12 +54,12 @@ def extract_keywords(flow1):
     return content_output
 
 def get_quotes(flow1, topics):
-    result = flow1(f'For each of the extracted topics, find the relevant quotes from the script: {topics}')
+    result = flow1(f'For each of the extracted topics, find the relevant quotes from the script: {topics}. Return the quotes as they have appeared in the script, no changes should be made.')
     quotes_output = result['chat_history'][1].content
     return quotes_output
 
 def get_qa_pairs(flow1, quotes):
-    result = flow1(f'For each of the extracted quotes, generate a question and answer pair: {quotes}')
+    result = flow1(f'For each of the extracted quotes, generate well-worded question and answer pair: {quotes}. They should not contain the name of the interviewers.')
     qa_pairs_output = result['chat_history'][1].content
     return qa_pairs_output
 
@@ -84,12 +84,15 @@ if uploaded_file:
 
     if "keywords" in st.session_state:
         # Display keywords in an editable text box
-        edited_keywords = st.text_area("Edit Keywords", value=st.session_state.keywords, height=300)
+        st.session_state.edited_keywords = st.text_area("Edit Keywords", value=st.session_state.keywords, height=300)
 
     if st.button("Get Quotes"):
         if "keywords" in st.session_state:
-            quotes = get_quotes(flow1, st.session_state.keywords)
+            quotes = get_quotes(flow1, st.session_state.edited_keywords)
             st.session_state.quotes = quotes  # Save quotes to session state
+        # elif st.session_state.edited_keywords:
+        #     quotes = get_quotes(flow1, st.session_state.edited_keywords)
+        #     st.session_state.quotes = quotes
         else:
             st.error("Extract keywords first before getting quotes.")
 
@@ -119,7 +122,7 @@ if uploaded_file:
                 )
 
     if st.button("Download Keywords"):
-        create_docx(edited_keywords if 'keywords' in st.session_state else '', 'output.docx')
+        create_docx(st.session_state.edited_keywords if 'keywords' in st.session_state else '', 'output.docx')
         with open("output.docx", "rb") as file:
             st.download_button(
                 label="Download Keywords as DOCX",
