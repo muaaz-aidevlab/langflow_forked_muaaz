@@ -10,9 +10,8 @@ load_dotenv()
 openai_api_key = os.getenv('OPENAI_API_KEY')
 
 # Load initial JSON configuration
-with open('carlat_step1_updated.json', "r", encoding="utf-8") as f:
+with open('carlat.json', "r", encoding="utf-8") as f:
     flow_graph = json.load(f)
-
 
 def update_api_key(data):
     if isinstance(data, dict):
@@ -30,6 +29,21 @@ def update_api_key(data):
 
 # Update the API key in the JSON
 update_api_key(flow_graph)
+#update_api_key(flow_graph_2)
+
+# def update_json_with_file_path(uploaded_file):
+#     # Save the uploaded file and update the JSON configuration
+#     if uploaded_file is not None:
+#         base_path = os.getcwd()  # Or any directory you want to save files in
+#         file_path = os.path.join(base_path, uploaded_file.name)
+#         with open(file_path, "wb") as f:
+#             f.write(uploaded_file.getbuffer())
+#         # Update the JSON node for the PDF loader with the new file path
+#         for node in flow_graph["data"]["nodes"]:
+#             if node["data"]["type"] == "PyPDFLoader":
+#                 node["data"]["node"]["template"]["file_path"]["file_path"] = file_path
+#         return file_path
+#     return None
 
 def update_json_with_file_path(uploaded_file):
     # Save the uploaded file and update the JSON configuration
@@ -40,27 +54,36 @@ def update_json_with_file_path(uploaded_file):
             f.write(uploaded_file.getbuffer())
         # Update the JSON node for the PDF loader with the new file path
         for node in flow_graph["data"]["nodes"]:
-            if node["data"]["type"] == "PyPDFLoader":
+            if node["data"]["type"] == "UnstructuredWordDocumentLoader":
                 node["data"]["node"]["template"]["file_path"]["file_path"] = file_path
         return file_path
     return None
 
-def load_flow():
-    return load_flow_from_json(flow_graph)
+def load_flow(flow_file):
+    return load_flow_from_json(flow_file)
 
-def extract_keywords(flow1):
-    result = flow1('Return up to 10 most interesting and important key topics found in this raw Q&A transcript. Display them as a bulleted list. Only return the topics and do not return the descriptions')
-    content_output = result['chat_history'][1].content
+# def extract_keywords(flow1):
+#     result = flow1('Return up to 10 most interesting and important key topics found in this raw Q&A transcript. Display them as a bulleted list. Only return the topics and do not return the descriptions')
+#     content_output = result['chat_history'][1].content
+#     return content_output
+
+def extract_keywords(flow1, custom_prompt=None):
+    if custom_prompt is None:
+        custom_prompt = 'Return up to 10 most interesting and important key topics found in this raw Q&A transcript. Display them as a bulleted list. Only return the topics and do not return the descriptions'
+    result = flow1(custom_prompt)
+    content_output = result['chat_history'][1].content  # Ensure the correct path to content
     return content_output
 
+
 def get_quotes(flow1, topics):
-    result = flow1(f'For each of the extracted topics, find the relevant quotes from the script: {topics}. Return the quotes as they have appeared in the script, no changes should be made.')
+    result = flow1(f'For each of the extracted topics, find the relevant quotes from the transcript: {topics}. Return the whole quotes as they have appeared in the transcript, no changes should be made to the quotes.')
     quotes_output = result['chat_history'][1].content
     return quotes_output
 
 def get_qa_pairs(flow1, quotes):
-    result = flow1(f'For each of the extracted quotes, generate well-worded question and answer pair: {quotes}. Do not mention the name of the interviewers or interviewee in the question answer pairs.')
+    result = flow1(f'For each of the extracted quotes, generate at max 2 well-worded comprehensive question and answer pairs from those quotes: {quotes}. Do not mention the name of the interviewers or interviewee in the question answer pairs. The answers should be of minimum 200 words for each of the questions generated from the quotes. Do not miss question-answer pair of any topic.')
     qa_pairs_output = result['chat_history'][1].content
+    #print(qa_pairs_output)
     return qa_pairs_output
 
 def create_docx(content, filename):
@@ -71,20 +94,30 @@ def create_docx(content, filename):
 # Streamlit UI components
 st.title("Dr. Carlat's App")
 
-uploaded_file = st.file_uploader("Upload a document", type=["pdf"])
+uploaded_file = st.file_uploader("Upload a document", type=["docx"])
 if uploaded_file:
     file_path = update_json_with_file_path(uploaded_file)
     st.success(f"File uploaded at {file_path}")
 
-    flow1 = load_flow()
+    flow1 = load_flow(flow_graph)
+
+    use_custom_prompt = st.checkbox('Use custom prompt for extracting keywords')
+    custom_prompt = ""
+    if use_custom_prompt:
+        custom_prompt = st.text_area('Enter your custom prompt for keyword extraction', height=150)
+
 
     if st.button("Extract Keywords"):
-        keywords = extract_keywords(flow1)
+        if use_custom_prompt and custom_prompt:
+            keywords = extract_keywords(flow1, custom_prompt=custom_prompt)
+        else:
+            keywords = extract_keywords(flow1)
         st.session_state.keywords = keywords  # Save keywords to session state
 
     if "keywords" in st.session_state:
         # Display keywords in an editable text box
         st.session_state.edited_keywords = st.text_area("Edit Keywords", value=st.session_state.keywords, height=300)
+
 
     if st.button("Get Quotes"):
         if "keywords" in st.session_state:
