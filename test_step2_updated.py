@@ -3,7 +3,10 @@ import json
 from docx import Document
 from langflow.processing.load import load_flow_from_json
 import os
-
+import re
+from docx.oxml.ns import qn
+from docx.shared import RGBColor
+from docx.enum.text import WD_COLOR_INDEX
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -29,21 +32,7 @@ def update_api_key(data):
 
 # Update the API key in the JSON
 update_api_key(flow_graph)
-#update_api_key(flow_graph_2)
 
-# def update_json_with_file_path(uploaded_file):
-#     # Save the uploaded file and update the JSON configuration
-#     if uploaded_file is not None:
-#         base_path = os.getcwd()  # Or any directory you want to save files in
-#         file_path = os.path.join(base_path, uploaded_file.name)
-#         with open(file_path, "wb") as f:
-#             f.write(uploaded_file.getbuffer())
-#         # Update the JSON node for the PDF loader with the new file path
-#         for node in flow_graph["data"]["nodes"]:
-#             if node["data"]["type"] == "PyPDFLoader":
-#                 node["data"]["node"]["template"]["file_path"]["file_path"] = file_path
-#         return file_path
-#     return None
 
 def update_json_with_file_path(uploaded_file):
     # Save the uploaded file and update the JSON configuration
@@ -62,10 +51,6 @@ def update_json_with_file_path(uploaded_file):
 def load_flow(flow_file):
     return load_flow_from_json(flow_file)
 
-# def extract_keywords(flow1):
-#     result = flow1('Return up to 10 most interesting and important key topics found in this raw Q&A transcript. Display them as a bulleted list. Only return the topics and do not return the descriptions')
-#     content_output = result['chat_history'][1].content
-#     return content_output
 
 def extract_keywords(flow1, custom_prompt=None):
     if custom_prompt is None:
@@ -76,7 +61,7 @@ def extract_keywords(flow1, custom_prompt=None):
 
 
 def get_quotes(flow1, topics):
-    result = flow1(f'For each of the extracted topics, find the relevant quotes from the transcript: {topics}. Return the whole quotes as they have appeared in the transcript, no changes should be made to the quotes.')
+    result = flow1(f'For each of the extracted topics, find the relevant quotes from the transcript: {topics}. Return the whole quotes as they have appeared in the transcript. If there are multiple quotes against a topic, then extract them separately. DO NOT JOIN MULTIPLE QUOTES USING ELLIPSIS AND NO CHANGES SHOULD BE MADE TO THE QUOTES.')
     quotes_output = result['chat_history'][1].content
     return quotes_output
 
@@ -85,6 +70,26 @@ def get_qa_pairs(flow1, quotes):
     qa_pairs_output = result['chat_history'][1].content
     #print(qa_pairs_output)
     return qa_pairs_output
+
+def highlight_text(doc_path, phrases):
+    print(phrases)
+    doc = Document(doc_path)
+    for para in doc.paragraphs:
+        for phrase in phrases:
+            if phrase.lower() in para.text.lower():
+                # Split the paragraph at the phrase, maintain formatting, and apply highlighting
+                words = para.text.split(phrase)
+                para.clear()
+                first = True
+                for part in words:
+                    run = para.add_run(part)
+                    run.font.color.rgb = RGBColor(0, 0, 0)
+                    if not first:
+                        highlighted_run = para.add_run(phrase)
+                        highlighted_run.font.highlight_color = WD_COLOR_INDEX.YELLOW
+                        highlighted_run.font.color.rgb = RGBColor(0, 0, 0)
+                    first = False
+    doc.save(doc_path)
 
 def create_docx(content, filename):
     doc = Document()
@@ -128,6 +133,25 @@ if uploaded_file:
         #     st.session_state.quotes = quotes
         else:
             st.error("Extract keywords first before getting quotes.")
+
+    if st.button("Highlight and Download Document"):
+        if "quotes" in st.session_state and uploaded_file:
+            # The file_path should have been set when the file was uploaded
+            text = st.session_state.quotes
+            pattern = r'"([^"]*)"'
+            quotes = re.findall(pattern, text)
+            highlight_text(file_path, quotes)  # Assuming quotes are newline-separated
+            st.success("Document highlighted successfully.")
+            # Provide a download button for the highlighted document
+            with open(file_path, "rb") as file:
+                st.download_button(
+                    label="Download Highlighted Document",
+                    data=file,
+                    file_name="highlighted_document.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+        else:
+            st.error("Please upload a document and extract quotes before highlighting.")
 
     if "quotes" in st.session_state:
         # Display quotes in a new text box
