@@ -8,7 +8,8 @@ from docx.oxml.ns import qn
 from docx.shared import RGBColor
 from docx.enum.text import WD_COLOR_INDEX
 
-from langchain_chroma import Chroma
+#from langchain_chroma import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import Docx2txtLoader
 #from langchain_text_splitters import CharacterTextSplitter
 #from langchain_text_splitters import TokenTextSplitter
@@ -165,7 +166,8 @@ if uploaded_file:
 
 
     # load it into Chroma
-    db = Chroma.from_documents(docs, embeddings)
+    #db = Chroma.from_documents(docs, embeddings)
+    db = FAISS.from_documents(docs, embeddings)
 
     flow1 = load_flow(flow_graph)
 
