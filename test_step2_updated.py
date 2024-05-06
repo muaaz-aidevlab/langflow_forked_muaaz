@@ -27,6 +27,9 @@ openai_api_key = os.getenv('OPENAI_API_KEY')
 with open('carlat.json', "r", encoding="utf-8") as f:
     flow_graph = json.load(f)
 
+with open('carlat_qa.json', "r", encoding="utf-8") as f:
+    flow_graph_2 = json.load(f)
+
 
 def update_api_key(data):
     if isinstance(data, dict):
@@ -44,6 +47,7 @@ def update_api_key(data):
 
 # Update the API key in the JSON
 update_api_key(flow_graph)
+update_api_key(flow_graph_2)
 
 
 def update_json_with_file_path(uploaded_file):
@@ -64,12 +68,18 @@ def load_flow(flow_file):
     return load_flow_from_json(flow_file)
 
 
-def extract_keywords(flow1, custom_prompt=None):
-    if custom_prompt is None:
-        custom_prompt = 'Return up to 10 most interesting, important, and unique key topics found in this raw Q&A transcript. Display them as a bulleted list. Only return the topics and do not return the descriptions'
-    result = flow1(custom_prompt)
-    content_output = result['chat_history'][1].content  # Ensure the correct path to content
+def extract_keywords(flow1, custom_prompt=""):
+    # Base prompt with the option to append additional instructions
+    base_prompt = 'Return up to 10 most interesting, important, and unique key topics found in this raw Q&A transcript. Display them as a bulleted list. Only return the topics and do not return the descriptions'
+    if custom_prompt:
+        full_prompt = f"{base_prompt} {custom_prompt}"  # Append custom instructions to the base prompt
+    else:
+        full_prompt = base_prompt
+    
+    result = flow1(full_prompt)
+    content_output = result['chat_history'][1].content  # Adjust path to content if necessary
     return content_output
+
 
 
 def get_quotes(flow1, topics):
@@ -77,10 +87,9 @@ def get_quotes(flow1, topics):
     quotes_output = result['chat_history'][1].content
     return quotes_output
 
-def get_qa_pairs(flow1, quotes):
-    result = flow1(f'For each of the extracted quotes, generate 1 to 3 well-worded comprehensive question and answer pairs from those quotes: {quotes}. Do not mention the name of the interviewers or interviewee in the question answer pairs. The answers should be of minimum 200 words for each of the questions generated from the quotes. Do not miss question-answer pair of any topic.')
-    qa_pairs_output = result['chat_history'][1].content
-    #print(qa_pairs_output)
+def get_qa_pairs(flow2, quotes):
+    result = flow2(quotes)
+    qa_pairs_output = result['text']
     return qa_pairs_output
 
 def highlight_text(doc_path, phrases):
@@ -160,7 +169,7 @@ if uploaded_file:
     loader = Docx2txtLoader(file_path)
     documents = loader.load()
     #text_splitter = TokenTextSplitter(chunk_size=256, chunk_overlap=0)
-    text_splitter = SpacyTextSplitter(chunk_size=1000)
+    text_splitter = SpacyTextSplitter(chunk_size=1500)
     docs = text_splitter.split_documents(documents)
 
 
@@ -170,19 +179,19 @@ if uploaded_file:
     db = FAISS.from_documents(docs, embeddings)
 
     flow1 = load_flow(flow_graph)
+    flow2 = load_flow(flow_graph_2)
 
-    use_custom_prompt = st.checkbox('Use custom prompt for extracting keywords')
+    use_custom_prompt = st.checkbox('Use custom prompt for augmenting keyword extraction')
     custom_prompt = ""
     if use_custom_prompt:
-        custom_prompt = st.text_area('Enter your custom prompt for keyword extraction', height=150)
+        custom_prompt = st.text_area('Enter your additional instructions for keyword extraction', height=150)
+
 
 
     if st.button("Extract Topics"):
-        if use_custom_prompt and custom_prompt:
-            keywords = extract_keywords(flow1, custom_prompt=custom_prompt)
-        else:
-            keywords = extract_keywords(flow1)
+        keywords = extract_keywords(flow1, custom_prompt=custom_prompt)
         st.session_state.keywords = keywords  # Save keywords to session state
+    # Save keywords to session state
 
     if "keywords" in st.session_state:
         # Display keywords in an editable text box
@@ -237,8 +246,14 @@ if uploaded_file:
 
     if st.button("Get QA pairs"):
         if "quotes" in st.session_state:
-            qa_pairs = get_qa_pairs(flow1, st.session_state.quotes)
-            st.session_state.qa_pairs = qa_pairs  # Save QA pairs to session state
+            combined_qa_pairs = []
+            quotes = [quote.strip() for quote in st.session_state.quotes.split('- ') if quote.strip()]
+            for quote in quotes:
+                qa_pairs = get_qa_pairs(flow2, quote)
+                combined_qa_pairs.append(qa_pairs)
+                combined_text = "\n\n".join(combined_qa_pairs)
+            st.session_state.qa_pairs = combined_text
+            #st.session_state.qa_pairs = qa_pairs  # Save QA pairs to session state
         else:
             st.error("Generate quotes first before getting QA pairs.")
 
